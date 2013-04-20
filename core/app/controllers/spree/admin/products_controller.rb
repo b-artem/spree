@@ -91,14 +91,10 @@ module Spree
 
             @search = super.ransack(params[:q])
             @collection = @search.result.
-              includes([:master, {:variants => [:images, :option_values]}]).
+              distinct_by_product_ids(params[:q][:s]).
+              includes(product_includes).
               page(params[:page]).
               per(Spree::Config[:admin_products_per_page])
-
-              # PostgreSQL compatibility
-              if params[:q][:s].include?("master_price")
-                @collection = @collection.group("spree_variants.price")
-              end
           else
             includes = [{:variants => [:images,  {:option_values => :option_type}]}, {:master => :images}]
 
@@ -121,6 +117,10 @@ module Spree
           # note: we only reset the product properties if we're receiving a post from the form on that tab
           return unless params[:clear_product_properties]
           params[:product] ||= {}
+        end
+
+	def product_includes
+          [{ :variants => [:images, { :option_values => :option_type }], :master => [:images]}]
         end
     end
   end
