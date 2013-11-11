@@ -663,14 +663,13 @@ describe Spree::Order do
 
   # Regression test for #2191
   context "when an order has an adjustment that zeroes the total, but another adjustment for shipping that raises it above zero" do
-    let!(:persisted_order) { create(:order) }
-    let!(:line_item) { create(:line_item) }
+    persisted_order = Factory(:order)
+    line_item = Factory(:line_item, :order => persisted_order)
     let!(:shipping_method) { create(:shipping_method) }
 
     before do
       # Don't care about available payment methods in this test
       persisted_order.stub(:has_available_payment => false)
-      persisted_order.line_items << line_item
       persisted_order.adjustments.create(:amount => 19.99, :label => "Promotion")
       persisted_order.state = 'delivery'
       persisted_order.save # To ensure new state_change event

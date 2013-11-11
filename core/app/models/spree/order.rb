@@ -15,14 +15,7 @@ module Spree
     checkout_flow do
       go_to_state :address
       go_to_state :delivery
-      go_to_state :payment, :if => lambda { |order|
-        # Fix for #2191
-        if order.shipping_method
-          order.create_shipment!
-          order.send(:update_totals)
-        end
-        order.payment_required?
-      }
+      go_to_state :payment, :if => lambda { |order| order.payment_required? }
       go_to_state :confirm, :if => lambda { |order| order.confirmation_required? }
       go_to_state :complete, :if => lambda { |order| (order.payment_required? && order.payments.exists?) || !order.payment_required? }
       remove_transition :from => :delivery, :to => :confirm
@@ -135,7 +128,6 @@ module Spree
 
     # Is this a free order in which case the payment step should be skipped
     def payment_required?
-      update_totals
       total.to_f > 0.0
     end
 

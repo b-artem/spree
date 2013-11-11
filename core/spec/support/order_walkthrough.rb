@@ -25,12 +25,11 @@ class OrderWalkthrough
   private
 
   def self.add_line_item!(order)
-    order.line_items << FactoryGirl.create(:line_item)
+    FactoryGirl.create(:line_item, :order => order)
     order.save
   end
 
   def self.address(order)
-
     order.bill_address = FactoryGirl.create(:address)
     order.ship_address = FactoryGirl.create(:address)
     order.next!

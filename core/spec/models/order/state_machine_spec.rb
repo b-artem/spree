@@ -129,7 +129,6 @@ describe Spree::Order do
 
     it "should send a cancel email" do
       # Stub methods that cause side-effects in this test
-      order.stub :has_available_shipment
       order.stub :restock_items!
       mail_message = mock "Mail::Message"
       Spree::OrderMailer.should_receive(:cancel_email).with(order).and_return mail_message
@@ -143,8 +142,6 @@ describe Spree::Order do
         shipment.stub(:update_order)
         Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
         mail_message.stub :deliver
-
-        order.stub :has_available_shipment
       end
 
       # Regression fix for #729
@@ -160,7 +157,6 @@ describe Spree::Order do
         # Stubs methods that cause unwanted side effects in this test
         Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
         mail_message.stub :deliver
-        order.stub :has_available_shipment
         order.stub :restock_items!
       end
 

@@ -13,6 +13,7 @@ describe Spree::LineItem do
   end
 
   before do
+    order.stub(:reload)
     line_item.stub(:order => order, :variant => variant, :new_record? => false)
     Spree::Config.set :allow_backorders => true
   end
