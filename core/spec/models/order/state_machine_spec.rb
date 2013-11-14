@@ -108,110 +108,147 @@ describe Spree::Order do
 
   end
 
-  context "#cancel" do
+  context "with line items, inventory and payment" do
+    let(:price) { 10.0 }
+    let(:quantity) { 2 }
     let!(:variant) { stub_model(Spree::Variant, :on_hand => 0) }
-    let!(:inventory_units) { [stub_model(Spree::InventoryUnit, :variant => variant),
-                              stub_model(Spree::InventoryUnit, :variant => variant) ]}
+    let!(:inventory_unit) { stub_model(Spree::InventoryUnit, :variant => variant) }
+    let!(:inventory_units) do
+      inventory_units = [inventory_unit, inventory_unit]
+      order.stub :inventory_units => inventory_units
+      inventory_units
+    end
     let!(:shipment) do
       shipment = stub_model(Spree::Shipment)
       shipment.stub :inventory_units => inventory_units
       order.stub :shipments => [shipment]
       shipment
     end
+    let!(:payment) do
+      payment = stub_model(Spree::Payment, :amount => price * quantity)
+      order.stub :payments => [payment]
+      order.stub_chain(:payments, :completed).and_return([payment])
+      payment
+    end
 
     before do
-      order.stub :line_items => [stub_model(Spree::LineItem, :variant => variant, :quantity => 2)]
+      order.stub :line_items => [stub_model(Spree::LineItem, :variant => variant, :price => price, :quantity => quantity, :amount => price * quantity)]
       order.line_items.stub :find_by_variant_id => order.line_items.first
 
-      order.stub :completed? => true
-      order.stub :allow_cancel? => true
+      # Stubs method that cause unwanted side effects in this test
+      order.stub :update_shipment_state
     end
 
-    it "should send a cancel email" do
-      # Stub methods that cause side-effects in this test
-      order.stub :restock_items!
-      mail_message = mock "Mail::Message"
-      Spree::OrderMailer.should_receive(:cancel_email).with(order).and_return mail_message
-      mail_message.should_receive :deliver
-      order.cancel!
-    end
-
-    context "restocking inventory" do
+    context "#cancel" do
       before do
-        shipment.stub(:ensure_correct_adjustment)
-        shipment.stub(:update_order)
-        Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
-        mail_message.stub :deliver
+        order.stub :completed? => true
+        order.stub :allow_cancel? => true
       end
 
-      # Regression fix for #729
-      specify do
-        Spree::InventoryUnit.should_receive(:decrease).with(order, variant, 2).once
+      it "should send a cancel email" do
+        # Stub methods that cause side-effects in this test
+        order.stub :restock_items!
+        mail_message = mock "Mail::Message"
+        Spree::OrderMailer.should_receive(:cancel_email).with(order).and_return mail_message
+        mail_message.should_receive :deliver
         order.cancel!
       end
-    end
 
-    context "resets payment state" do
-      before do
-        # TODO: This is ugly :(
-        # Stubs methods that cause unwanted side effects in this test
-        Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
-        mail_message.stub :deliver
-        order.stub :restock_items!
-      end
-
-      context "without shipped items" do
-        it "should set payment state to 'credit owed'" do
-          order.cancel!
-          order.payment_state.should == 'credit_owed'
-        end
-      end
-
-      context "with shipped items" do
+      context "restocking inventory" do
         before do
-          order.stub :shipment_state => 'partial'
+          shipment.stub(:ensure_correct_adjustment)
+          shipment.stub(:update_order)
+          Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
+          mail_message.stub :deliver
         end
 
-        it "should not alter the payment state" do
+        # Regression fix for #729
+        specify do
+          Spree::InventoryUnit.should_receive(:decrease).with(order, variant, 2).once
           order.cancel!
-          order.payment_state.should be_nil
+        end
+      end
+
+      context "resets payment state" do
+        before do
+          # TODO: This is ugly :(
+          # Stubs methods that cause unwanted side effects in this test
+          Spree::OrderMailer.stub(:cancel_email).and_return(mail_message = stub)
+          mail_message.stub :deliver
+          order.stub :restock_items!
+          order.stub :canceled? => true
+        end
+
+        context "without shipped items" do
+          it "should set payment state to 'credit owed'" do
+            order.cancel!
+            order.payment_state.should == 'credit_owed'
+          end
+        end
+
+      end
+
+      it "should change shipment status (unless shipped)"
+    end
+
+    # Another regression test for #729
+    context "#resume" do
+      before do
+        order.stub :email => "user@spreecommerce.com"
+        order.stub :state => "canceled"
+        order.stub :allow_resume? => true
+        order.stub :canceled? => false
+
+        # Stubs method that cause unwanted side effects in this test
+        order.stub :has_available_shipment
+        order.stub :update_shipment_state
+      end
+
+      context "with compeleted payment" do
+        before do
+          Spree::InventoryUnit.stub :increase
+        end
+
+        context "payment total = order total" do
+          before do
+            payment.stub :amount => price * quantity
+          end
+
+          it "should set payment state to 'paid'" do
+            order.resume!
+            order.payment_state.should == 'paid'
+          end
+        end
+
+        context "payment total > order total" do
+          before do
+            payment.stub :amount => price * quantity + 1
+          end
+
+          it "should set payment state to 'credit_owed'" do
+            order.resume!
+            order.payment_state.should == 'credit_owed'
+          end
+        end
+
+        context "payment total < order total" do
+          before do
+            payment.stub :amount => price * quantity - 1
+          end
+
+          it "should set payment state to 'balance_due'" do
+            order.resume!
+            order.payment_state.should == 'balance_due'
+          end
+        end
+      end
+
+      context "with inventory units" do
+        it "should unstocks inventory" do
+            Spree::InventoryUnit.should_receive(:increase).with(order, variant, 2).once
+            order.resume!
         end
       end
     end
-
-    it "should change shipment status (unless shipped)"
-  end
-
-  # Another regression test for #729
-  context "#resume" do
-    before do
-      order.stub :email => "user@spreecommerce.com"
-      order.stub :state => "canceled"
-      order.stub :allow_resume? => true
-
-      # Stubs method that cause unwanted side effects in this test
-      order.stub :has_available_shipment
-    end
-
-    context "unstocks inventory" do
-      let(:variant) { stub_model(Spree::Variant) }
-
-      before do
-        shipment = stub_model(Spree::Shipment)
-        line_item = stub_model(Spree::LineItem, :variant => variant, :quantity => 2)
-        order.stub :line_items => [line_item]
-        order.line_items.stub :find_by_variant_id => line_item
-
-        order.stub :shipments => [shipment]
-        shipment.stub :inventory_units => [stub_model(Spree::InventoryUnit, :variant => variant),
-                                           stub_model(Spree::InventoryUnit, :variant => variant) ]
-      end
-
-      specify do
-        Spree::InventoryUnit.should_receive(:increase).with(order, variant, 2).once
-        order.resume!
-      end
-    end
-
   end
 end

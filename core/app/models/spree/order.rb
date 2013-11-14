@@ -597,7 +597,7 @@ module Spree
         self.payment_total = payments.completed.map(&:amount).sum
         self.item_total = line_items.map(&:amount).sum
         self.adjustment_total = adjustments.eligible.map(&:amount).sum
-        self.total = item_total + adjustment_total
+        self.total = canceled? ? 0 : item_total + adjustment_total
       end
 
       # Updates each of the Order adjustments.  This is intended to be called from an Observer so that the Order can
@@ -627,12 +627,10 @@ module Spree
 
       def after_cancel
         restock_items!
+        update!
 
         #TODO: make_shipments_pending
         OrderMailer.cancel_email(self).deliver
-        unless %w(partial shipped).include?(shipment_state)
-          self.payment_state = 'credit_owed'
-        end
       end
 
       def restock_items!
@@ -643,6 +641,7 @@ module Spree
 
       def after_resume
         unstock_items!
+        update!
       end
 
       def unstock_items!
