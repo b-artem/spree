@@ -138,6 +138,7 @@ describe Spree::Order do
       order.stub :has_available_shipment
 
       Spree::OrderMailer.stub_chain :confirm_email, :deliver
+      order.stub :update_totals
       adjustment1 = mock_model(Spree::Adjustment, :mandatory => true)
       adjustment2 = mock_model(Spree::Adjustment, :mandatory => false)
       order.stub :adjustments => [adjustment1, adjustment2]
