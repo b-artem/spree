@@ -117,7 +117,7 @@ module Spree
                        :tax      => order.tax_total * 100,
                        :subtotal => order.item_total * 100 })
       
-      options.merge!({ :currency => (order.currency || payment_method.preferences[:currency_code]) }) if payment_method && payment_method.preferences[:currency_code]
+      options.merge!({ :currency => (order.currency || payment_method.preferences[:currency_code]) }) if order.currency || (payment_method && payment_method.preferences[:currency_code])
 
       options.merge!({ :billing_address  => order.bill_address.try(:active_merchant_hash),
                       :shipping_address => order.ship_address.try(:active_merchant_hash) })
